@@ -1,53 +1,65 @@
 # frame-privacy-acct
 
-FrameAccount, a CREATE2 factory, and the shared **WithdrawalSingleton** used
-as the MSP v2 proof recipient.
+Smart-account infra for Hegotá, meant to sit behind **one** MSP `DEFAULT` tail.
+Newest MSP admits a generic leftover call (zero value, gas/calldata caps). Proof
+`recipient` is the **smart account** (payout dest). The tail target is
+**Multicall3**, not a custom withdrawal hook.
 
-The MSP pool does not know about these contracts. A public withdrawal sets
-`recipient` to the singleton and encodes the fourth frame as
-`DEFAULT(singleton, settleWithdrawal(nf1, extra))`. Extra is an owner-signed
-FrameAccount intent: `abi.encode(owner, salt, calls, signature)`.
+```
+DEFAULT(Multicall3, aggregate3([...]))
+```
 
-## How `nf1` is bound to a user
+`msg.sender` of the inner calls is Multicall3. That is enough, because:
 
-The pool only records `(recipient, amount)` for `nf1`. Recipient is the shared
-singleton, so the pool does not know which user owns the credit.
+- MSP `claimWithdrawal(who)` pays `who`, not the caller
+- `FrameAccountFactory.createAccount` is permissionless
+- `EntryPoint.handleOps` is permissionless
+- `FrameAccount.executeBatch` checks the owner signature in calldata
 
-Binding lives on the singleton: `bound[nf1] → FrameAccount`. That mapping is
-ordinary storage, so it **only exists if `settleWithdrawal` returns**. A revert
-rolls it back. Then:
+Do not credit Multicall3.
 
-| Situation | Who can take `nf1` |
+## 4337 path (eth-infinitism SimpleAccount v0.8)
+
+Multicall legs:
+
+1. `claimWithdrawal(account)` — funds the counterfactual CREATE2 address
+2. `handleOps([userOp], beneficiary = account)` — `userOp.initCode` deploys via
+   `SimpleAccountFactory`; `callData` is `execute` / `executeBatch`
+
+`SimpleAccountFactory.createAccount` is gated to EntryPoint's `SenderCreator`.
+Do not call it from Multicall3. There is no bundler: set `beneficiary` to the
+account so leftover 4337 prepaid gas returns to the user. The account pays
+EntryPoint from the claimed ETH even though the outer FrameTx already paid
+pool gas.
+
+On mainnet-like chains EntryPoint v0.8 lives at `0x4337084D9E255Ff0702461CF8895CE9E3b5Ff108`. Hegotá needs its own deployment.
+
+## FrameAccount path
+
+Multicall legs:
+
+1. `claimWithdrawal(account)`
+2. `FrameAccountFactory.createAccount(owner, salt)` (no-op if already deployed)
+3. `FrameAccount.executeBatch(calls, signature)`
+
+Anyone can call the account; the owner ECDSA is in the batch. The owner may
+also call `executeBatch` directly without a signature.
+
+## Layout
+
+| Piece | Source |
 |---|---|
-| Original FrameTx (fourth frame still in the spend) | Extra is inside the spend authorizer signature. A third party cannot swap dest on **that** tx. |
-| `settleWithdrawal` **returned** (claim or batch may have failed) | Only that CREATE2 account. Later extras with a different owner revert `NotBoundAccount`. |
-| `settleWithdrawal` **reverted** (bad sig, OOG, panic before return) | Pool credit remains. Anyone can retry with a **different** extra. The receive-gate only blocks unlabeled `claimWithdrawal`, not dest substitution. |
-
-There is no way, without MSP recording authorizer or dest, for the singleton
-to know the “original” user after a fully reverting fourth frame. `lock` would
-be first-writer-wins and is therefore omitted (an attacker would lock first).
-
-## `settleWithdrawal`
-
-1. Recovers the owner over FrameAccount's `executeDigest` (nonce 0 if the
-   account is undeployed). A bad sig reverts **before** `bound` is written.
-2. Writes `bound[nf1]` if unset; otherwise requires the same account.
-3. CREATE2s via the pinned factory if needed.
-4. `claimWithdrawal(nf1)` behind a receive-gate. Claim/batch failures are
-   swallowed so a returned call keeps the bind; credit stays on the pool if
-   the claim did not succeed.
-5. Forwards claimed ETH to the account.
-6. Tries `executeBatch`. Owner retries on the account (new nonce/sig) if the
-   batch failed after the pull.
-
-Existing accounts (same factory owner+salt) skip deploy.
+| Multicall3 | `mds1/multicall` v3.1.0 |
+| EntryPoint, SimpleAccount, SimpleAccountFactory | `eth-infinitism/account-abstraction` v0.8.0 |
+| FrameAccount, FrameAccountFactory | this repo |
+| Multicall3Artifact | compile shim: Multicall3 is `pragma solidity 0.8.12`, so tests/`Deploy.s.sol` `create` from its artifact instead of importing it into 0.8.24+ files |
 
 ```
 forge test
 ```
 
-Deploy (proof recipient = singleton):
+Deploy:
 
 ```
-MSP_POOL=0x... forge script script/Deploy.s.sol --broadcast
+forge script script/Deploy.s.sol --broadcast --rpc-url <hegota>
 ```

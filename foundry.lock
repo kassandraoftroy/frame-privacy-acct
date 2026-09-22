@@ -1,8 +1,26 @@
 {
+  "lib/account-abstraction": {
+    "tag": {
+      "name": "v0.8.0",
+      "rev": "4cbc06072cdc19fd60f285c5997f4f7f57a588de"
+    }
+  },
   "lib/forge-std": {
     "tag": {
       "name": "v1.16.2",
       "rev": "bf647bd6046f2f7da30d0c2bf435e5c76a780c1b"
+    }
+  },
+  "lib/multicall": {
+    "tag": {
+      "name": "v3.1.0",
+      "rev": "a1fa0644fa412cd3237ef7081458ecb2ffad7dbe"
+    }
+  },
+  "lib/openzeppelin-contracts": {
+    "tag": {
+      "name": "v5.2.0",
+      "rev": "acd4ff74de833399287ed6b31b4debf6b2b35527"
     }
   }
 }

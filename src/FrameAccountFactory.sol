@@ -4,16 +4,9 @@ pragma solidity ^0.8.24;
 import {FrameAccount} from "./FrameAccount.sol";
 
 /// @notice CREATE2 factory for [`FrameAccount`]. Permissionless; no-ops if the
-/// account is already deployed. `pool` is the MSP dispatcher address the
-/// account records; it is not a privileged caller of [`FrameAccount.executeBatch`].
+/// account is already deployed.
 contract FrameAccountFactory {
-    address public immutable pool;
-
     error CreateFailed();
-
-    constructor(address pool_) {
-        pool = pool_;
-    }
 
     function getAddress(address owner, bytes32 salt) public view returns (address) {
         bytes32 h = keccak256(abi.encodePacked(bytes1(0xff), address(this), salt, keccak256(_initCode(owner))));
@@ -30,7 +23,7 @@ contract FrameAccountFactory {
         if (account == address(0)) revert CreateFailed();
     }
 
-    function _initCode(address owner) internal view returns (bytes memory) {
-        return abi.encodePacked(type(FrameAccount).creationCode, abi.encode(owner, pool));
+    function _initCode(address owner) internal pure returns (bytes memory) {
+        return abi.encodePacked(type(FrameAccount).creationCode, abi.encode(owner));
     }
 }

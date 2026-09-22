@@ -1,12 +1,11 @@
 // SPDX-License-Identifier: Apache-2.0
 pragma solidity ^0.8.24;
 
-/// @notice Owner-gated batch executor. The shielded pool and
-/// [`WithdrawalSingleton`] are not privileged: any non-owner caller must
-/// supply the owner's ECDSA over [`executeDigest`].
+/// @notice Owner-gated batch executor. Anyone may call [`executeBatch`]
+/// if they supply the owner's ECDSA over [`executeDigest`]. The owner may
+/// call without a signature. The shielded pool is not a privileged caller.
 contract FrameAccount {
     address public immutable owner;
-    address public immutable pool;
     uint256 public nonce;
 
     struct Call {
@@ -19,9 +18,8 @@ contract FrameAccount {
     error BadSignature();
     error CallFailed(uint256 index);
 
-    constructor(address owner_, address pool_) {
+    constructor(address owner_) {
         owner = owner_;
-        pool = pool_;
     }
 
     receive() external payable {}
