@@ -103,6 +103,46 @@ contract FrameAccountTailTest is Test {
         assertEq(pool.withdrawalCredit(account), 0);
     }
 
+    function testSelfCallTransfersWithoutInnerSignature() public {
+        address account = factory.createAccount(owner, bytes32(uint256(9)));
+        vm.deal(account, 1 ether);
+        address dest = address(0xBEEF);
+        FrameAccount.Call[] memory calls = new FrameAccount.Call[](1);
+        calls[0] = FrameAccount.Call({target: dest, value: 0.2 ether, data: ""});
+
+        vm.prank(account);
+        FrameAccount(payable(account)).executeBatch(calls, "");
+
+        assertEq(dest.balance, 0.2 ether);
+        assertEq(account.balance, 0.8 ether);
+        assertEq(FrameAccount(payable(account)).nonce(), 1);
+    }
+
+    function testStrangerStillNeedsOwnerSignature() public {
+        address account = factory.createAccount(owner, bytes32(uint256(11)));
+        Target t = new Target();
+        FrameAccount.Call[] memory calls = _ping(address(t));
+        vm.prank(address(0x1234));
+        vm.expectRevert(FrameAccount.BadSignature.selector);
+        FrameAccount(payable(account)).executeBatch(calls, "");
+        assertEq(t.hits(), 0);
+    }
+
+    function testApproveStubCarriesSigParamAndApprove() public {
+        address stub = factory.approveStub();
+        assertGt(stub.code.length, 0);
+        bytes memory code = stub.code;
+        bool sawSig = false;
+        bool sawApprove = false;
+        for (uint256 i = 0; i < code.length; i++) {
+            if (code[i] == 0xb4) sawSig = true;
+            if (code[i] == 0xaa) sawApprove = true;
+        }
+        assertTrue(sawSig);
+        assertTrue(sawApprove);
+        assertEq(FrameAccount(payable(factory.createAccount(owner, bytes32(uint256(4))))).factory(), address(factory));
+    }
+
     function testUnsignedBatchFromMulticallReverts() public {
         bytes32 salt = bytes32(uint256(3));
         address account = factory.getAddress(owner, salt);

@@ -13,4 +13,7 @@ remappings = [
     "@openzeppelin/contracts/=lib/openzeppelin-contracts/contracts/",
     "account-abstraction/=lib/account-abstraction/contracts/",
     "multicall/=lib/multicall/src/",
+    "@uniswap/v2-core/=lib/v2-core/",
+    "@uniswap/v2-periphery/=lib/v2-periphery/",
+    "@uniswap/lib/=lib/solidity-lib/",
 ]
